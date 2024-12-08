@@ -17,3 +17,4 @@ def block_indices(block_num):
 
 for i in range(9):
     print(block_indices(i))
+

@@ -1,3 +1,23 @@
+# difficulty = 0.5
+# population_size = 500
+# generations = 200
+# mutation_rate = 0.08
+# successes = 0
+# max_mutations = 1
+# cull_rate = 75
+# restart_gen = 60
+# 92 out of 132
+# 57.07608695652174 generations average for 1000 iterations
+#  max gens: 106, min gens 0, average time 0
+# Training iteration 133, number of successes so far: 92 out of 132
+# Puzzle has exactly one solution
+
+# cull_rate = 25
+# 33.705989110707804 generations average for 1000 iterations
+#  max gens: 115, min gens 0, average time 0.014737853546016264
+# Training iteration 605, number of successes so far: 551 out of 604
+# Puzzle has multiple solutions
+
 import random
 import csv
 import numpy as np
@@ -43,22 +63,22 @@ def generate_fixed_mask(board):
 def coord(row, col):
     return row*9+col
 
-def block_indices(block_num):
+def block_indices(block_num, n):
     """return linear array indices corresp to the sq block, row major, 0-indexed.
     block:
        0 1 2     (0,0) (0,3) (0,6)
        3 4 5 --> (3,0) (3,3) (3,6)
        6 7 8     (6,0) (6,3) (6,6)
     """
-    firstrow = (block_num // 3) * 3
-    firstcol = (block_num % 3) * 3
-    indices = [coord(firstrow+i, firstcol+j) for i in range(3) for j in range(3)]
+    firstrow = (block_num // n) * n
+    firstcol = (block_num % n) * n
+    indices = [coord(firstrow+i, firstcol+j) for i in range(n) for j in range(n)]
     return indices
 
-def generate_individual(problem):
+def generate_individual(problem, n):
     solution = problem.copy()
     for block in range(9):
-        indices = block_indices(block)
+        indices = block_indices(block, n)
         block = problem[indices]
         zeros = [i for i in indices if problem[i] == 0]
         to_fill = [i for i in range(1, 10) if i not in block]
@@ -123,7 +143,7 @@ def crossover(board1, board2):
 # swap mutation function
 # swaps 2 random elements within the matrix, can randomly swap 1-n elements with max_mutation
 
-def mutate(board, fixed_mask, mutation_rate):
+def mutate_old(board, fixed_mask, mutation_rate):
     # Decide if mutation should occur based on the mutation rate
     if np.random.rand() > mutation_rate:
         return board  # No mutation; return the board unchanged
@@ -163,6 +183,28 @@ def mutate(board, fixed_mask, mutation_rate):
     # Return the mutated board as a flattened array
     return board.flatten()
 
+# will need to adapt for more than one mutation
+def mutate(board, fixed_mask, mutation_rate, mutation_amount, n):
+    if np.random.rand() > mutation_rate:
+        return board 
+    
+    while True:
+        block_num = np.random.randint(0, n*n - 1)
+        blanks_indices = get_blank_indices(fixed_mask, block_num, n)
+        if (len(blanks_indices) > 1):
+            break
+    
+    # 
+    for mutation_num in range(min(mutation_amount, len(blanks_indices)/2)):
+        # select random 
+        idx1, idx2 = np.random.choice(blanks_indices, size=2, replace=False)
+
+        # Perform the swap
+        board[idx1], board[idx2] = board[idx2], board[idx1]
+    
+    # Return the mutated board as a flattened array
+    return board
+
 # def mean_absolute_deviation(numbers):
 #     mean = sum(numbers) / len(numbers)
 #     return sum(abs(x - mean) for x in numbers) / len(numbers)
@@ -185,7 +227,7 @@ def mutate(board, fixed_mask, mutation_rate):
 #     return mutation_rate, stuck
 
 
-def genetic_algorithm(problem, n, population_size, generations, mutation_rate, max_mutations, cull_percent, restart_gen, logging = False):
+def genetic_algorithm(problem, n, population_size, generations, mutation_rate, mutation_amount, cull_percent, restart_gen, logging = False):
     random.seed()
     np.random.seed()
     restart_num = 0
@@ -199,7 +241,7 @@ def genetic_algorithm(problem, n, population_size, generations, mutation_rate, m
     
     population_set = set()
     while not len(population_set) == population_size:
-        population_set.add(tuple(generate_individual(problem)))
+        population_set.add(tuple(generate_individual(problem, n)))
 
     population = np.array(list(population_set))
     # population = np.array([np.reshape(lst, (n, n)) for lst in population])
@@ -249,7 +291,7 @@ def genetic_algorithm(problem, n, population_size, generations, mutation_rate, m
                     (child2, child2_fitness)
                 ]
                 best_individual, best_individual_fitness = max(all_candidates, key=lambda x: x[1])
-            best_individual_mutated = mutate(best_individual, fixed_mask, mutation_rate)
+            best_individual_mutated = mutate(best_individual, fixed_mask, mutation_rate, mutation_amount, n)
             best_individual_mutated_fitness = calculate_fitness(best_individual_mutated)
             #child2 = mutate(child2, fixed_mask, mutation_rate)
             #new_population_set.add(tuple(child1))
@@ -288,7 +330,7 @@ def genetic_algorithm(problem, n, population_size, generations, mutation_rate, m
 
         # adds new pop after culling
         while not len(population) >= population_size:
-            population.append(generate_individual(problem))
+            population.append(generate_individual(problem, n))
 
         fitness_scores = [calculate_fitness(
             individual) for individual in population]
@@ -350,33 +392,17 @@ def genetic_algorithm(problem, n, population_size, generations, mutation_rate, m
         best_individual = population[fitness_scores.index(max(fitness_scores))]
     return best_individual, generation, success
 
-def get_possible_values(board, row, col):
-    """Return the set of possible values for a given empty cell at (row, col)"""
-    # Possible values are the numbers 1-9
-    all_values = set(range(1, 10))
-    
-    # Eliminate numbers already present in the row, column, and 3x3 subgrid
-    row_values = set(board[row, :]) - {0}
-    col_values = set(board[:, col]) - {0}
-    # Determine the top-left corner of the subgrid
-    subgrid_row_start = (row // 3) * 3
-    subgrid_col_start = (col // 3) * 3
-    subgrid_values = set(board[subgrid_row_start:subgrid_row_start+3, subgrid_col_start:subgrid_col_start+3].flatten()) - {0}
-    
-    # Remove already used numbers from all values
-    possible_values = all_values - row_values - col_values - subgrid_values
-    
-    return possible_values
-
 def count_variations(board, n):
     grid_blanks = np.array([], dtype=int)
     total_variations = 1
+    total_grids = n*n
     
-    for block_num in range(n):
-        square_indices = block_indices(block_num)
+    for block_num in range(total_grids):
+        # NEED TO FIGURE OUT IF N = SUBGRID OR WIDTH/HEIGHT
+        square_indices = block_indices(block_num, n)
         subgrid_blanks = 0
         for square_index in square_indices:
-            if (board[square_index] == 0):
+            if (board[square_index - 1] == 0):
                 subgrid_blanks += 1
         grid_blanks = np.append(grid_blanks, subgrid_blanks)
     
@@ -387,15 +413,23 @@ def count_variations(board, n):
                 
     return total_variations
 
+def get_blank_indices(fixed_mask, block_num, n):
+    subgrid_blanks = np.array([], dtype=int)
+    square_indices = block_indices(block_num, n)
+    for index in square_indices:
+        if fixed_mask[index] == 0:
+            subgrid_blanks = np.append(subgrid_blanks, index)
+    return subgrid_blanks
+
 def main():
     n = 3
     population_size = 500
     generations = 200
-    mutation_rate = 0.25
+    mutation_rate = 0.08
     test_results = []
     successes = 0
     max_mutations = 1
-    cull_rate = 75
+    cull_rate = 25
     restart_gen = 60
     min_gen = 0
     max_gen = 0
@@ -405,6 +439,8 @@ def main():
     for i in range(iterations):
         print("Training iteration " + str(i + 1) + ", number of successes so far: " + str(successes) + " out of " + str(i))
         real_population_size = 0
+        avg_success_time = 0
+        success_total_time = 0
         
         # Generate a Sudoku puzzle with a random difficulty
         # Can't have a board where the number of permutations are lower than 4 since the individual generation will always output the solution
@@ -419,30 +455,26 @@ def main():
             
             # Flatten
             PROBLEM = np.array(grid).flatten()
-            max_population_size = count_variations(PROBLEM, n*n)
+            max_population_size = count_variations(PROBLEM, n)
             real_population_size = min(max_population_size, population_size)
 
         
         
-        # START TIME
+        # START 
         start_time = time.time()
-        solution, gens_to_conv, success = genetic_algorithm(PROBLEM, n*n, real_population_size, generations, mutation_rate, max_mutations, cull_rate, restart_gen)
-        # STOP TIME
+        solution, gens_to_conv, success = genetic_algorithm(PROBLEM, n, real_population_size, generations, mutation_rate, max_mutations, cull_rate, restart_gen)
         iteration_time = time.time() - start_time
-        total_time += iteration_time  # Accumulate total time
-        # Calculate average time per iteration
-        avg_time_per_iteration = total_time / (i + 1)
+        # STOP 
         
         if success:
-            total_time += iteration_time  # Accumulate total time
-            # Calculate average time per iteration
-            avg_time_per_iteration = total_time / (i + 1)
+            success_total_time += iteration_time
+            avg_success_time = success_total_time / (i + 1)
             min_gen = min(gens_to_conv, min_gen)
             max_gen = max(gens_to_conv, max_gen)
             print_sudoku(solution)
             successes += 1
             test_results.append(gens_to_conv)
-        print(f"{np.mean(np.array(test_results))} generations average for {iterations} iterations\n max gens: {max_gen}, min gens {min_gen}, average time {avg_time_per_iteration}")
+        print(f"{np.mean(np.array(test_results))} generations average for {iterations} iterations\n max gens: {max_gen}, min gens {min_gen}, average time {avg_success_time}")
 
 
     print(str(iterations) + " training iterations\n" + str(len(test_results)) + " total successes (" + str(iterations//len(test_results)) + ")")
