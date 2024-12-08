@@ -15,18 +15,18 @@ RED = "\033[31m"
 GREEN = "\033[32m"
 RESET = "\033[0m"
 
-# def print_sudoku(state):
-#     border = "------+-------+------"
-#     rows = [state[i:i+9] for i in range(0,81,9)]
-#     for i,row in enumerate(rows):
-#         if i % 3 == 0:
-#             print(border)
-#         three = [row[i:i+3] for i in range(0,9,3)]
-#         print(" | ".join(
-#             " ".join(str(x or "_") for x in one)
-#             for one in three
-#         ))
-#     print(border)
+def print_sudoku(state):
+    border = "------+-------+------"
+    rows = [state[i:i+9] for i in range(0,81,9)]
+    for i,row in enumerate(rows):
+        if i % 3 == 0:
+            print(border)
+        three = [row[i:i+3] for i in range(0,9,3)]
+        print(" | ".join(
+            " ".join(str(x or "_") for x in one)
+            for one in three
+        ))
+    print(border)
 
 def generate_fixed_mask(board):
     """
@@ -185,8 +185,7 @@ def mutate(board, fixed_mask, mutation_rate):
 #     return mutation_rate, stuck
 
 
-def genetic_algorithm(problem, n, population_size, generations, mutation_rate, max_mutations, cull_percent, restart_gen):
-    
+def genetic_algorithm(problem, n, population_size, generations, mutation_rate, max_mutations, cull_percent, restart_gen, logging = False):
     random.seed()
     np.random.seed()
     restart_num = 0
@@ -227,6 +226,8 @@ def genetic_algorithm(problem, n, population_size, generations, mutation_rate, m
                     population, weights=fitness_scores, k=1)[0]
 
                 # makes sure parent1 and parent2 aren't just the same individual
+                if population_size == 2:
+                    print("Test")
                 while np.array_equal(parent1, parent2):
                     parent2 = random.choices(
                         population, weights=fitness_scores, k=1)[0]
@@ -240,7 +241,6 @@ def genetic_algorithm(problem, n, population_size, generations, mutation_rate, m
                 parent2_fitness = calculate_fitness(parent2)  # Replace with your fitness evaluation function
                 child1_fitness = calculate_fitness(child1)    # Replace with your fitness evaluation function
                 child2_fitness = calculate_fitness(child2)    # Replace with your fitness evaluation function
-                print("Starting genetic algorithm")
                 # Find the individual with the highest fitness
                 all_candidates = [
                     (parent1, parent1_fitness),
@@ -257,6 +257,7 @@ def genetic_algorithm(problem, n, population_size, generations, mutation_rate, m
                 new_population_set.add(tuple(best_individual_mutated))
             else:
                 new_population_set.add(tuple(best_individual))
+            
 
         # update old pop with new pop and calculate new pop's fitness scores
         population = np.array(list(new_population_set))
@@ -312,7 +313,7 @@ def genetic_algorithm(problem, n, population_size, generations, mutation_rate, m
 
         if (highest_fitness > best_so_far):
             best_so_far = highest_fitness
-            print(f"{best_so_far}", end=", ")
+            print(f"{best_so_far}", end=", ", flush=True)
             gens_without_improve = 0
         else:
             gens_without_improve += 1
@@ -325,28 +326,28 @@ def genetic_algorithm(problem, n, population_size, generations, mutation_rate, m
             restart_num += 1
             print(f"Restarting, {restart_num} restarts so far")
             break
+    if logging:
+        plt.clf()
+        # Separate the data into two lists for plotting
+        y_values = np.array([point[0] for point in fittest_score_log])
+        x_values = np.array([point[1] for point in fittest_score_log])
 
-    plt.clf()
-    # Separate the data into two lists for plotting
-    y_values = np.array([point[0] for point in fittest_score_log])
-    x_values = np.array([point[1] for point in fittest_score_log])
+        # Create the scatter plot
+        plt.plot(x_values, y_values, color='blue', label='Fitness Scores')
 
-    # Create the scatter plot
-    plt.plot(x_values, y_values, color='blue', label='Fitness Scores')
+        # Add labels and title
+        plt.ylabel('Highest Fitness')
+        plt.xlabel('Generations')
+        title_string = f"{n}x{n}, mutation rate: {mutation_rate}, pop size: {population_size}, max: {highest_fitness}"
+        plt.title(title_string, color='green' if success else 'red')
 
-    # Add labels and title
-    plt.ylabel('Highest Fitness')
-    plt.xlabel('Generations')
-    title_string = f"{n}x{n}, mutation rate: {mutation_rate}, pop size: {population_size}, max: {highest_fitness}"
-    plt.title(title_string, color='green' if success else 'red')
+        # Add legend
+        plt.legend()
 
-    # Add legend
-    plt.legend()
-
-    # Get the current time to create a folder
-    current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    plt.savefig(current_time + '.png')
-    best_individual = population[fitness_scores.index(max(fitness_scores))]
+        # Get the current time to create a folder
+        current_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        plt.savefig(current_time + '.png')
+        best_individual = population[fitness_scores.index(max(fitness_scores))]
     return best_individual, generation, success
 
 def get_possible_values(board, row, col):
@@ -367,80 +368,84 @@ def get_possible_values(board, row, col):
     
     return possible_values
 
-def count_variations(board):
+def count_variations(board, n):
+    grid_blanks = np.array([], dtype=int)
     total_variations = 1
     
-    # Go through each subgrid and count the possible variations for the empty spaces
-    for i in range(3):  # 3 rows of subgrids
-        for j in range(3):  # 3 columns of subgrids
-            subgrid_cells = []
-            # Extract the cells in the 3x3 subgrid
-            for r in range(i * 3, (i + 1) * 3):
-                for c in range(j * 3, (j + 1) * 3):
-                    if board[r, c] == 0:  # Empty space
-                        subgrid_cells.append((r, c))
-            
-            # For each empty cell in the subgrid, get the possible values
-            subgrid_possibilities = []
-            for r, c in subgrid_cells:
-                possible_values = get_possible_values(board, r, c)
-                subgrid_possibilities.append(possible_values)
-            
-            # Calculate the number of possible combinations for the subgrid
-            if subgrid_possibilities:
-                subgrid_combinations = 1
-                for possible_values in subgrid_possibilities:
-                    subgrid_combinations *= len(possible_values)
-                total_variations *= subgrid_combinations
+    for block_num in range(n):
+        square_indices = block_indices(block_num)
+        subgrid_blanks = 0
+        for square_index in square_indices:
+            if (board[square_index] == 0):
+                subgrid_blanks += 1
+        grid_blanks = np.append(grid_blanks, subgrid_blanks)
     
+    for blank_count in grid_blanks:
+        if blank_count != 0:
+            fac = math.factorial(blank_count)
+            total_variations *= fac
+                
     return total_variations
 
-n = 9
-population_size = 500
-generations = 200
-mutation_rate = 0.25
-test_results = []
-successes = 0
-max_mutations = 1
-cull_rate = 75
-restart_gen = 60
+def main():
+    n = 3
+    population_size = 500
+    generations = 200
+    mutation_rate = 0.25
+    test_results = []
+    successes = 0
+    max_mutations = 1
+    cull_rate = 75
+    restart_gen = 60
+    min_gen = 0
+    max_gen = 0
+    iterations = 1000
+    total_time = 0
+    
+    for i in range(iterations):
+        print("Training iteration " + str(i + 1) + ", number of successes so far: " + str(successes) + " out of " + str(i))
+        real_population_size = 0
+        
+        # Generate a Sudoku puzzle with a random difficulty
+        # Can't have a board where the number of permutations are lower than 4 since the individual generation will always output the solution
+        # Useless to have a board where number of permutations are less than the population_size anyways since it'll just be a bad permutation generator
+        while (real_population_size <= 4):
+            puzzle = Sudoku(n, seed=time.time()).difficulty(0.5)
+            puzzle.show()
+            # Get the puzzle grid (it will be a 2D list)
+            grid = puzzle.board
+            grid = [[0 if cell is None else cell for cell in row] for row in grid]
+            grid = np.array(grid)
+            
+            # Flatten
+            PROBLEM = np.array(grid).flatten()
+            max_population_size = count_variations(PROBLEM, n*n)
+            real_population_size = min(max_population_size, population_size)
 
-min_gen = 0
-max_gen = 0
-iterations = 1000
-total_time = 0
-for i in range(iterations):
-    print("Training iteration " + str(i + 1) + ", number of successes so far: " + str(successes) + " out of " + str(i))
-    # Generate a Sudoku puzzle with a random difficulty
-    puzzle = Sudoku(3, seed=time.time()).difficulty(0.5)  #np.random.rand() Difficulty levels are "easy", "medium", "hard"
-    puzzle.show()
-    # Get the puzzle grid (it will be a 2D list)
-    grid = puzzle.board
-    grid = [[0 if cell is None else cell for cell in row] for row in grid]
-    grid = np.array(grid)
-    max_population_size = count_variations(grid)
-    # Convert the 2D grid into a 1D NumPy array (flatten it)
-    PROBLEM = np.array(grid).flatten()
-    
-    # START TIME
-    start_time = time.time()
-    solution, gens_to_conv, success = genetic_algorithm(PROBLEM, n, population_size, generations, mutation_rate, max_mutations, cull_rate, restart_gen)
-    # STOP TIME
-    iteration_time = time.time() - start_time
-    total_time += iteration_time  # Accumulate total time
-    # Calculate average time per iteration
-    avg_time_per_iteration = total_time / (i + 1)
-    
-    if success:
+        
+        
+        # START TIME
+        start_time = time.time()
+        solution, gens_to_conv, success = genetic_algorithm(PROBLEM, n*n, real_population_size, generations, mutation_rate, max_mutations, cull_rate, restart_gen)
+        # STOP TIME
+        iteration_time = time.time() - start_time
         total_time += iteration_time  # Accumulate total time
         # Calculate average time per iteration
         avg_time_per_iteration = total_time / (i + 1)
-        min_gen = min(gens_to_conv, min_gen)
-        max_gen = max(gens_to_conv, max_gen)
-        print_sudoku(solution)
-        successes += 1
-        test_results.append(gens_to_conv)
-    print(f"{np.mean(np.array(test_results))} generations average for {iterations} iterations\n max gens: {max_gen}, min gens {min_gen}, average time {avg_time_per_iteration}")
+        
+        if success:
+            total_time += iteration_time  # Accumulate total time
+            # Calculate average time per iteration
+            avg_time_per_iteration = total_time / (i + 1)
+            min_gen = min(gens_to_conv, min_gen)
+            max_gen = max(gens_to_conv, max_gen)
+            print_sudoku(solution)
+            successes += 1
+            test_results.append(gens_to_conv)
+        print(f"{np.mean(np.array(test_results))} generations average for {iterations} iterations\n max gens: {max_gen}, min gens {min_gen}, average time {avg_time_per_iteration}")
 
 
-print(str(iterations) + " training iterations\n" + str(len(test_results)) + "total successes (" + str(iterations//len(test_results)) + ")")
+    print(str(iterations) + " training iterations\n" + str(len(test_results)) + " total successes (" + str(iterations//len(test_results)) + ")")
+    
+if __name__ == "__main__":
+    main()
